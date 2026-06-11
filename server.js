@@ -1,4 +1,3 @@
-
 const sessions = {};
 
 const express = require('express');
@@ -17,6 +16,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Puedes usar 'gemini-1.5-flash' o 'gemini-2.0-flash' o la versión que tengas configurada
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
 let websiteContent = '';
@@ -52,28 +52,40 @@ const RSCE_URLS = [
   'https://www.rsce.es/faq/',
 ];
 
+// Extracción optimizada (en paralelo y limpiando el contenido innecesario)
 async function scrapeWebsite() {
-  console.log('Extrayendo web...');
-  let allContent = '';
+  console.log('Iniciando extracción de la web de RSCE...');
+  const startTime = Date.now();
 
-  for (const url of RSCE_URLS) {
-    try {
-      const response = await axios.get(url);
-      const $ = cheerio.load(response.data);
+  try {
+    const promises = RSCE_URLS.map(async (url) => {
+      try {
+        // Añadimos timeout de 10 segundos para evitar bloqueos
+        const response = await axios.get(url, { timeout: 10000 });
+        const $ = cheerio.load(response.data);
 
-      const title = $('title').text();
-      const body = $('body').text();
+        // Eliminamos elementos que ensucian el texto (scripts, estilos, navegación, menús)
+        $('script, style, nav, footer, header, iframe, noscript').remove();
 
-      allContent += `\n--- ${title} ---\n`;
-      allContent += body.substring(0, 1500);
+        const title = $('title').text().trim();
+        // Colapsamos los espacios en blanco múltiples para ahorrar tokens
+        const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
 
-    } catch (err) {
-      console.log('Error scraping:', url);
-    }
+        return `\n--- Sección: ${title} ---\n${bodyText.substring(0, 1500)}\n`;
+      } catch (err) {
+        console.log(`No se pudo extraer: ${url} (Error: ${err.message})`);
+        return '';
+      }
+    });
+
+    const results = await Promise.all(promises);
+    websiteContent = results.filter(content => content !== '').join('\n');
+    
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`Contenido cargado exitosamente en ${duration}s ✅`);
+  } catch (error) {
+    console.error('Error general en la extracción:', error);
   }
-
-  websiteContent = allContent;
-  console.log('Contenido cargado ✅');
 }
 
 scrapeWebsite();
@@ -98,18 +110,25 @@ app.post('/api/chat', async (req, res) => {
       .map(m => `${m.role === "user" ? "Usuario" : "Bot"}: ${m.content}`)
       .join("\n");
 
+    // Hemos modificado el Prompt para forzar y guiar al bot a dar preguntas de seguimiento lógicas
     const prompt = `
-Eres un asistente de la RSCE.
-Responde SIEMPRE en español.
-Sé natural, útil y breve.
+Eres un asistente virtual oficial de la RSCE (Real Sociedad Canina de España).
+Responde SIEMPRE en español, de manera natural, útil y concisa.
 
-Historial:
-${history}
-
-Contenido:
+Usa la siguiente información del sitio web para fundamentar tus respuestas:
 ${websiteContent}
 
-Usuario: ${message}
+Historial de la conversación:
+${history}
+
+Pregunta del usuario: ${message}
+
+INSTRUCCIONES DE RESPUESTA:
+1. Responde a la pregunta del usuario con la información disponible.
+2. Al final de tu respuesta, añade una pequeña sección llamada "**Preguntas sugeridas:**" o "**También te puede interesar:**" y propón de 2 a 3 preguntas de seguimiento muy cortas y amigables que el usuario podría querer hacer a continuación según lo que acaban de hablar.
+Por ejemplo:
+- ¿Quieres saber cuáles son las tarifas para tramitar un pedigree?
+- ¿Te gustaría conocer el calendario de exposiciones?
 `;
 
     const result = await model.generateContent(prompt);
@@ -120,11 +139,12 @@ Usuario: ${message}
     res.json({ reply });
 
   } catch (err) {
-    res.json({ reply: "Error, inténtalo otra vez." });
+    console.error('Error en /api/chat:', err); // Ahora verás el detalle del fallo en tu terminal
+    res.json({ reply: "Error al procesar la respuesta, por favor inténtalo de nuevo." });
   }
 });
 
-// limpiar memoria automática
+// Limpiar memoria automática
 setInterval(() => {
   for (const id in sessions) {
     if (sessions[id].length > 20) {
@@ -138,5 +158,5 @@ app.get('/', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Servidor activo en ${PORT}`);
+  console.log(`Servidor activo en puerto ${PORT}`);
 });
