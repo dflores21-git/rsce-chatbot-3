@@ -1,0 +1,52 @@
+{
+  "faqs": [
+    {
+      "id": 1,
+      "question": "What is RSCE?",
+      "keywords": ["rsce", "what", "about"],
+      "answer": "RSCE stands for Royal Society of Chemistry Education. We are dedicated to promoting chemistry education and supporting educators worldwide."
+    },
+    {
+      "id": 2,
+      "question": "How do I become a member?",
+      "keywords": ["member", "membership", "join", "register"],
+      "answer": "To become a member, visit our membership page and fill out the registration form. We offer various membership levels to suit your needs."
+    },
+    {
+      "id": 3,
+      "question": "What are your contact details?",
+      "keywords": ["contact", "phone", "email", "address"],
+      "answer": "You can reach us at support@rsce.com or visit our website's contact page for phone numbers and office locations."
+    },
+    {
+      "id": 4,
+      "question": "Do you offer educational resources?",
+      "keywords": ["resources", "educational", "materials", "learning"],
+      "answer": "Yes! We provide a wide range of educational resources including lesson plans, videos, and interactive tools for chemistry education."
+    },
+    {
+      "id": 5,
+      "question": "How can I access member benefits?",
+      "keywords": ["benefits", "access", "member", "perks"],
+      "answer": "Members can log in to their account on our website to access exclusive resources, discounts, and community forums."
+    },
+    {
+      "id": 6,
+      "question": "Is there a student discount?",
+      "keywords": ["student", "discount", "price", "cost"],
+      "answer": "Yes, we offer special student membership rates. Please provide proof of enrollment when registering as a student."
+    },
+    {
+      "id": 7,
+      "question": "How often do you update your content?",
+      "keywords": ["update", "new", "content", "frequently"],
+      "answer": "We update our resources regularly, typically adding new materials monthly. Subscribe to our newsletter for the latest updates."
+    },
+    {
+      "id": 8,
+      "question": "Can I cancel my membership?",
+      "keywords": ["cancel", "membership", "stop", "unsubscribe"],
+      "answer": "Yes, you can cancel your membership anytime from your account settings. Please note that cancellations take effect at the end of your billing cycle."
+    }
+  ]
+}
