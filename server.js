@@ -1,4 +1,3 @@
-const sessions = {};
 
 const express = require('express');
 const cors = require('cors');
@@ -7,20 +6,28 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
-
+ 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
+ 
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
-
+ 
+// ─── Gemini setup ────────────────────────────────────────────────────────────
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-// Puedes usar 'gemini-1.5-flash' o 'gemini-2.0-flash' o la versión que tengas configurada
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-
+ 
+// ─── State ───────────────────────────────────────────────────────────────────
+const sessions = new Map();          // sessionId → { messages[], lastActive }
 let websiteContent = '';
-
+let isScraping = false;
+ 
+const SESSION_TTL_MS   = 30 * 60 * 1000;  // 30 min inactivity → evict
+const MAX_SESSIONS     = 500;
+const MAX_INPUT_LENGTH = 500;
+ 
+// ─── URLs ────────────────────────────────────────────────────────────────────
 const RSCE_URLS = [
   'https://www.rsce.es/',
   'https://www.rsce.es/quienes-somos/',
@@ -51,112 +58,166 @@ const RSCE_URLS = [
   'https://www.rsce.es/jueces-de-la-rsce/',
   'https://www.rsce.es/faq/',
 ];
-
-// Extracción optimizada (en paralelo y limpiando el contenido innecesario)
-async function scrapeWebsite() {
-  console.log('Iniciando extracción de la web de RSCE...');
-  const startTime = Date.now();
-
-  try {
-    const promises = RSCE_URLS.map(async (url) => {
-      try {
-        // Añadimos timeout de 10 segundos para evitar bloqueos
-        const response = await axios.get(url, { timeout: 10000 });
-        const $ = cheerio.load(response.data);
-
-        // Eliminamos elementos que ensucian el texto (scripts, estilos, navegación, menús)
-        $('script, style, nav, footer, header, iframe, noscript').remove();
-
-        const title = $('title').text().trim();
-        // Colapsamos los espacios en blanco múltiples para ahorrar tokens
-        const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
-
-        return `\n--- Sección: ${title} ---\n${bodyText.substring(0, 1500)}\n`;
-      } catch (err) {
-        console.log(`No se pudo extraer: ${url} (Error: ${err.message})`);
-        return '';
-      }
-    });
-
-    const results = await Promise.all(promises);
-    websiteContent = results.filter(content => content !== '').join('\n');
-    
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`Contenido cargado exitosamente en ${duration}s ✅`);
-  } catch (error) {
-    console.error('Error general en la extracción:', error);
-  }
+ 
+// ─── Scraping ────────────────────────────────────────────────────────────────
+function cleanText(raw) {
+  return raw
+    .replace(/\s+/g, ' ')           // colapsar espacios/saltos
+    .replace(/[^\S\r\n]+/g, ' ')
+    .trim();
 }
-
-scrapeWebsite();
-setInterval(scrapeWebsite, 24 * 60 * 60 * 1000);
-
-app.post('/api/chat', async (req, res) => {
-  const { message, sessionId } = req.body;
-
-  if (!message) {
-    return res.json({ reply: "Escribe algo primero 😊" });
-  }
-
-  if (!sessions[sessionId]) {
-    sessions[sessionId] = [];
-  }
-
-  sessions[sessionId].push({ role: "user", content: message });
-
-  try {
-    const history = sessions[sessionId]
-      .slice(-6)
-      .map(m => `${m.role === "user" ? "Usuario" : "Bot"}: ${m.content}`)
-      .join("\n");
-
-    // Hemos modificado el Prompt para forzar y guiar al bot a dar preguntas de seguimiento lógicas
-    const prompt = `
-Eres un asistente virtual oficial de la RSCE (Real Sociedad Canina de España).
-Responde SIEMPRE en español, de manera natural, útil y concisa.
-
-Usa la siguiente información del sitio web para fundamentar tus respuestas:
-${websiteContent}
-
-Historial de la conversación:
-${history}
-
-Pregunta del usuario: ${message}
-
-INSTRUCCIONES DE RESPUESTA:
-1. Responde a la pregunta del usuario con la información disponible.
-2. Al final de tu respuesta, añade una pequeña sección llamada "**Preguntas sugeridas:**" o "**También te puede interesar:**" y propón de 2 a 3 preguntas de seguimiento muy cortas y amigables que el usuario podría querer hacer a continuación según lo que acaban de hablar.
-Por ejemplo:
-- ¿Quieres saber cuáles son las tarifas para tramitar un pedigree?
-- ¿Te gustaría conocer el calendario de exposiciones?
-`;
-
-    const result = await model.generateContent(prompt);
-    const reply = result.response.text();
-
-    sessions[sessionId].push({ role: "bot", content: reply });
-
-    res.json({ reply });
-
-  } catch (err) {
-    console.error('Error en /api/chat:', err); // Ahora verás el detalle del fallo en tu terminal
-    res.json({ reply: "Error al procesar la respuesta, por favor inténtalo de nuevo." });
-  }
-});
-
-// Limpiar memoria automática
-setInterval(() => {
-  for (const id in sessions) {
-    if (sessions[id].length > 20) {
-      sessions[id] = sessions[id].slice(-10);
+ 
+async function scrapeWebsite() {
+  if (isScraping) return;
+  isScraping = true;
+  console.log('🔄 Extrayendo contenido web...');
+ 
+  const parts = [];
+ 
+  for (const url of RSCE_URLS) {
+    try {
+      const response = await axios.get(url, { timeout: 8000 });
+      const $ = cheerio.load(response.data);
+ 
+      // Eliminar bloques que no aportan contenido útil
+      $('script, style, nav, footer, header, .menu, .cookie-banner').remove();
+ 
+      const title = $('title').text().trim();
+      const body  = cleanText($('body').text()).substring(0, 2000);
+ 
+      parts.push(`\n=== ${title} (${url}) ===\n${body}`);
+    } catch (err) {
+      console.warn(`⚠️  Error scraping ${url}: ${err.message}`);
     }
   }
-}, 60000);
-
-app.get('/', (req, res) => {
+ 
+  websiteContent = parts.join('\n');
+  isScraping = false;
+  console.log(`✅ Contenido cargado (${Math.round(websiteContent.length / 1024)} KB)`);
+}
+ 
+scrapeWebsite();
+setInterval(scrapeWebsite, 24 * 60 * 60 * 1000);
+ 
+// ─── Session helpers ─────────────────────────────────────────────────────────
+function getSession(sessionId) {
+  if (!sessions.has(sessionId)) {
+    // Evict oldest session if at capacity
+    if (sessions.size >= MAX_SESSIONS) {
+      const oldest = [...sessions.entries()].sort((a, b) => a[1].lastActive - b[1].lastActive)[0];
+      sessions.delete(oldest[0]);
+    }
+    sessions.set(sessionId, { messages: [], lastActive: Date.now() });
+  }
+  const session = sessions.get(sessionId);
+  session.lastActive = Date.now();
+  return session;
+}
+ 
+// Evict inactive sessions every 10 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, session] of sessions) {
+    if (now - session.lastActive > SESSION_TTL_MS) sessions.delete(id);
+  }
+}, 10 * 60 * 1000);
+ 
+// ─── Chat endpoint ───────────────────────────────────────────────────────────
+app.post('/api/chat', async (req, res) => {
+  const { message, sessionId } = req.body;
+ 
+  // Validación básica
+  if (!message || typeof message !== 'string' || !message.trim()) {
+    return res.json({ reply: 'Escribe algo primero 😊', followUps: [] });
+  }
+  if (!sessionId || typeof sessionId !== 'string') {
+    return res.status(400).json({ error: 'sessionId requerido' });
+  }
+ 
+  const sanitized = message.trim().substring(0, MAX_INPUT_LENGTH);
+  const session   = getSession(sessionId);
+ 
+  session.messages.push({ role: 'user', content: sanitized });
+ 
+  // Últimas 6 rondas de conversación (3 usuario + 3 bot)
+  const recentHistory = session.messages
+    .slice(-6)
+    .map(m => `${m.role === 'user' ? 'Usuario' : 'Asistente'}: ${m.content}`)
+    .join('\n');
+ 
+  const prompt = `
+Eres el asistente virtual oficial de la RSCE (Real Sociedad Canina de España).
+Responde SIEMPRE en español. Sé natural, útil y conciso.
+Usa el contenido de la web como fuente principal. Si no encuentras la respuesta, dilo claramente.
+ 
+Historial reciente:
+${recentHistory}
+ 
+Contenido de la web RSCE:
+${websiteContent}
+ 
+Pregunta del usuario: ${sanitized}
+ 
+Responde en formato JSON con esta estructura exacta (sin markdown, sin bloques de código):
+{
+  "reply": "<tu respuesta principal, clara y útil>",
+  "followUps": ["<pregunta relacionada 1>", "<pregunta relacionada 2>", "<pregunta relacionada 3>"]
+}
+ 
+Las followUps deben ser preguntas cortas y relevantes que el usuario podría querer preguntar a continuación.
+`;
+ 
+  try {
+    const result = await model.generateContent(prompt);
+    const raw    = result.response.text().trim();
+ 
+    // Parsear JSON con fallback robusto
+    let reply    = raw;
+    let followUps = [];
+ 
+    try {
+      // Eliminar posibles bloques ```json ... ``` que el modelo a veces incluye
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+      const parsed  = JSON.parse(cleaned);
+      reply    = parsed.reply    ?? raw;
+      followUps = Array.isArray(parsed.followUps) ? parsed.followUps.slice(0, 3) : [];
+    } catch {
+      // Si el modelo no devuelve JSON válido, usar texto plano sin followUps
+      reply = raw;
+    }
+ 
+    session.messages.push({ role: 'bot', content: reply });
+ 
+    // Evitar que el historial crezca indefinidamente
+    if (session.messages.length > 40) {
+      session.messages = session.messages.slice(-20);
+    }
+ 
+    return res.json({ reply, followUps });
+ 
+  } catch (err) {
+    console.error('Error Gemini:', err.message);
+    return res.json({
+      reply: 'Lo siento, ha ocurrido un error. Por favor, inténtalo de nuevo.',
+      followUps: [],
+    });
+  }
+});
+ 
+// ─── Health check ─────────────────────────────────────────────────────────────
+app.get('/api/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    sessions: sessions.size,
+    contentLoaded: websiteContent.length > 0,
+  });
+});
+ 
+// ─── Catch-all → index.html ───────────────────────────────────────────────────
+app.get('*', (_req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
-
+ 
 app.listen(PORT, () => {
-  console.log(`Servidor activo en puerto ${PORT}`);
+  console.log(`🚀 Servidor activo en http://localhost:${PORT}`);
 });
