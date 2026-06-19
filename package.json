@@ -1,7 +1,7 @@
 {
   "name": "rsce-chatbot",
-  "version": "2.0.0",
-  "description": "Website-based chatbot for RSCE using web scraping and OpenAI",
+  "version": "3.0.0",
+  "description": "Website-based chatbot for RSCE using Microsoft Copilot Studio (Direct Line)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -9,21 +9,19 @@
   },
   "keywords": [
     "chatbot",
-    "web-scraping",
-    "openai",
+    "copilot-studio",
+    "directline",
     "rsce"
   ],
   "author": "jadeeteli-rsce",
   "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.102.0",
-    "@google/generative-ai": "^0.24.1",
-    "axios": "^1.6.2",
-    "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
-    "express": "^4.18.2",
-    "openai": "^4.20.1"
+    "express": "^4.18.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
