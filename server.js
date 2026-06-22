@@ -15,7 +15,7 @@ const COPILOT_BASE_URL = 'https://defaulte92af6beadc748a1965e60e102a5f0.5d.envir
 const BOT_IDENTIFIER  = 'cref3_asistenteRsce3MZRN1';
 const API_VERSION     = '2022-03-01-preview';
 
-const CONVERSATIONS_URL = `${COPILOT_BASE_URL}/copilotstudio/dataverse-backed/unauthenticated/bots/${BOT_IDENTIFIER}/conversations?api-version=${API_VERSION}`;
+const CONVERSATIONS_URL = `${COPILOT_BASE_URL}/copilotstudio/bots/${BOT_IDENTIFIER}/conversations?api-version=${API_VERSION}`;
 
 // ─── Helpers REST ─────────────────────────────────────────────────────────────
 async function startConversation() {
