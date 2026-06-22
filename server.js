@@ -4,10 +4,7 @@ const path = require('path');
 require('dotenv').config();
 
 const { ConfidentialClientApplication } = require('@azure/msal-node');
-const {
-  CopilotStudioClient,
-  CopilotStudioConnectionSettings,
-} = require('@microsoft/agents-copilotstudio-client');
+const { CopilotStudioClient } = require('@microsoft/agents-copilotstudio-client');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -37,10 +34,10 @@ const msalClient = new ConfidentialClientApplication({
   },
 });
 
-const copilotSettings = new CopilotStudioConnectionSettings({
+const copilotSettings = {
   environmentId: process.env.COPILOT_ENVIRONMENT_ID,
   schemaName: process.env.COPILOT_SCHEMA_NAME,
-});
+};
 
 // MSAL cachea el token internamente y lo renueva solo cuando hace falta,
 // así que podemos llamar esto en cada request sin preocuparnos por expiración.
