@@ -1,7 +1,7 @@
 {
   "name": "rsce-chatbot",
-  "version": "3.0.0",
-  "description": "Website-based chatbot for RSCE using Microsoft Copilot Studio (Direct Line)",
+  "version": "3.1.0",
+  "description": "Website-based chatbot for RSCE using Microsoft Copilot Studio (M365 Agents SDK)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -10,7 +10,7 @@
   "keywords": [
     "chatbot",
     "copilot-studio",
-    "directline",
+    "agents-sdk",
     "rsce"
   ],
   "author": "jadeeteli-rsce",
@@ -19,6 +19,8 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@azure/msal-node": "^2.16.0",
+    "@microsoft/agents-copilotstudio-client": "^1.5.3",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
     "express": "^4.18.2"
