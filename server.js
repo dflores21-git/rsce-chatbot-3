@@ -3,8 +3,6 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
-const { ConfidentialClientApplication } = require('@azure/msal-node');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -12,54 +10,18 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
-// ─── Configuración ────────────────────────────────────────────────────────────
-const REQUIRED_ENV = [
-  'AZURE_TENANT_ID',
-  'AZURE_CLIENT_ID',
-  'AZURE_CLIENT_SECRET',
-];
-const missingEnv = REQUIRED_ENV.filter((k) => !process.env[k]);
-if (missingEnv.length) {
-  console.warn(`⚠️  Faltan variables de entorno: ${missingEnv.join(', ')}`);
-}
-
-// URL directa del cluster (evita el error "Invalid cluster category value: Unknown")
+// ─── Configuración Copilot Studio (sin autenticación) ────────────────────────
 const COPILOT_BASE_URL = 'https://defaulte92af6beadc748a1965e60e102a5f0.5d.environment.api.powerplatform.com';
 const BOT_IDENTIFIER  = 'cref3_asistenteRsce3MZRN1';
 const API_VERSION     = '2022-03-01-preview';
 
-const CONVERSATIONS_URL = `${COPILOT_BASE_URL}/copilotstudio/dataverse-backed/authenticated/bots/${BOT_IDENTIFIER}/conversations?api-version=${API_VERSION}`;
-
-// Scope para adquirir el token contra esta URL
-const TOKEN_SCOPE = 'https://api.powerplatform.com/.default';
-
-// ─── MSAL ─────────────────────────────────────────────────────────────────────
-const msalClient = new ConfidentialClientApplication({
-  auth: {
-    clientId: process.env.AZURE_CLIENT_ID,
-    authority: `https://login.microsoftonline.com/${process.env.AZURE_TENANT_ID}`,
-    clientSecret: process.env.AZURE_CLIENT_SECRET,
-  },
-});
-
-async function acquireAppToken() {
-  const result = await msalClient.acquireTokenByClientCredential({
-    scopes: [TOKEN_SCOPE],
-  });
-  if (!result || !result.accessToken) {
-    throw new Error('No se pudo obtener el token de acceso de Azure AD');
-  }
-  return result.accessToken;
-}
+const CONVERSATIONS_URL = `${COPILOT_BASE_URL}/copilotstudio/dataverse-backed/unauthenticated/bots/${BOT_IDENTIFIER}/conversations?api-version=${API_VERSION}`;
 
 // ─── Helpers REST ─────────────────────────────────────────────────────────────
-async function startConversation(token) {
+async function startConversation() {
   const res = await fetch(CONVERSATIONS_URL, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({}),
   });
   if (!res.ok) {
@@ -67,22 +29,15 @@ async function startConversation(token) {
     throw new Error(`startConversation ${res.status}: ${text}`);
   }
   const data = await res.json();
-  // La API devuelve { conversationId, ... } o { id, ... } según versión
   return data.conversationId || data.id;
 }
 
-async function sendMessage(token, conversationId, text) {
-  const url = `${COPILOT_BASE_URL}/copilotstudio/dataverse-backed/authenticated/bots/${BOT_IDENTIFIER}/conversations/${conversationId}/activities?api-version=${API_VERSION}`;
+async function sendMessage(conversationId, text) {
+  const url = `${COPILOT_BASE_URL}/copilotstudio/dataverse-backed/unauthenticated/bots/${BOT_IDENTIFIER}/conversations/${conversationId}/activities?api-version=${API_VERSION}`;
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      type: 'message',
-      text,
-    }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'message', text }),
   });
   if (!res.ok) {
     const errText = await res.text();
@@ -91,12 +46,10 @@ async function sendMessage(token, conversationId, text) {
   return res.json();
 }
 
-async function getActivities(token, conversationId, watermark) {
-  let url = `${COPILOT_BASE_URL}/copilotstudio/dataverse-backed/authenticated/bots/${BOT_IDENTIFIER}/conversations/${conversationId}/activities?api-version=${API_VERSION}`;
+async function getActivities(conversationId, watermark) {
+  let url = `${COPILOT_BASE_URL}/copilotstudio/dataverse-backed/unauthenticated/bots/${BOT_IDENTIFIER}/conversations/${conversationId}/activities?api-version=${API_VERSION}`;
   if (watermark) url += `&watermark=${watermark}`;
-  const res = await fetch(url, {
-    headers: { 'Authorization': `Bearer ${token}` },
-  });
+  const res = await fetch(url);
   if (!res.ok) {
     const errText = await res.text();
     throw new Error(`getActivities ${res.status}: ${errText}`);
@@ -104,21 +57,23 @@ async function getActivities(token, conversationId, watermark) {
   return res.json();
 }
 
-// Espera la respuesta del bot con polling (máx 15 s)
-async function waitForBotReply(token, conversationId, watermark) {
+// Polling: espera la respuesta del bot (máx 15 s)
+async function waitForBotReply(conversationId, watermark) {
   const MAX_ATTEMPTS = 15;
   const DELAY_MS     = 1000;
   let lastWatermark  = watermark;
 
   for (let i = 0; i < MAX_ATTEMPTS; i++) {
     await new Promise((r) => setTimeout(r, DELAY_MS));
-    const data = await getActivities(token, conversationId, lastWatermark);
+    const data       = await getActivities(conversationId, lastWatermark);
     const activities = data.activities || [];
-    const botMessages = activities.filter((a) => a.type === 'message' && a.from?.role === 'bot');
+    const botMessages = activities.filter(
+      (a) => a.type === 'message' && a.from?.role === 'bot'
+    );
 
     if (botMessages.length > 0) {
-      const textParts = botMessages.map((a) => a.text).filter(Boolean);
-      const reply     = textParts.join('\n\n') || 'No obtuve una respuesta del agente.';
+      const reply = botMessages.map((a) => a.text).filter(Boolean).join('\n\n')
+        || 'No obtuve una respuesta del agente.';
 
       const withSuggestions = botMessages.find(
         (a) => a.suggestedActions?.actions?.length
@@ -133,7 +88,11 @@ async function waitForBotReply(token, conversationId, watermark) {
     if (data.watermark) lastWatermark = data.watermark;
   }
 
-  return { reply: 'El agente tardó demasiado en responder. Inténtalo de nuevo.', followUps: [], watermark: lastWatermark };
+  return {
+    reply: 'El agente tardó demasiado en responder. Inténtalo de nuevo.',
+    followUps: [],
+    watermark: lastWatermark,
+  };
 }
 
 // ─── State ────────────────────────────────────────────────────────────────────
@@ -146,7 +105,8 @@ const MAX_INPUT_LENGTH = 500;
 function getSession(sessionId) {
   if (!sessions.has(sessionId)) {
     if (sessions.size >= MAX_SESSIONS) {
-      const oldest = [...sessions.entries()].sort((a, b) => a[1].lastActive - b[1].lastActive)[0];
+      const oldest = [...sessions.entries()]
+        .sort((a, b) => a[1].lastActive - b[1].lastActive)[0];
       sessions.delete(oldest[0]);
     }
     sessions.set(sessionId, { conversationId: null, watermark: null, lastActive: Date.now() });
@@ -178,19 +138,17 @@ app.post('/api/chat', async (req, res) => {
   const session   = getSession(sessionId);
 
   try {
-    const token = await acquireAppToken();
-
-    // Crear conversación si no existe
     if (!session.conversationId) {
-      session.conversationId = await startConversation(token);
+      session.conversationId = await startConversation();
       session.watermark      = null;
     }
 
-    // Enviar mensaje
-    await sendMessage(token, session.conversationId, sanitized);
+    await sendMessage(session.conversationId, sanitized);
 
-    // Esperar respuesta del bot
-    const { reply, followUps, watermark } = await waitForBotReply(token, session.conversationId, session.watermark);
+    const { reply, followUps, watermark } = await waitForBotReply(
+      session.conversationId,
+      session.watermark
+    );
     session.watermark = watermark;
 
     return res.json({ reply, followUps });
@@ -209,11 +167,7 @@ app.post('/api/chat', async (req, res) => {
 
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    sessions: sessions.size,
-    copilotConfigured: missingEnv.length === 0,
-  });
+  res.json({ status: 'ok', sessions: sessions.size });
 });
 
 // ─── Catch-all → index.html ───────────────────────────────────────────────────
