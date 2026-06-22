@@ -31,7 +31,7 @@ const API_VERSION     = '2022-03-01-preview';
 const CONVERSATIONS_URL = `${COPILOT_BASE_URL}/copilotstudio/dataverse-backed/authenticated/bots/${BOT_IDENTIFIER}/conversations?api-version=${API_VERSION}`;
 
 // Scope para adquirir el token contra esta URL
-const TOKEN_SCOPE = `${COPILOT_BASE_URL}/.default`;
+const TOKEN_SCOPE = 'https://api.powerplatform.com/.default';
 
 // ─── MSAL ─────────────────────────────────────────────────────────────────────
 const msalClient = new ConfidentialClientApplication({
