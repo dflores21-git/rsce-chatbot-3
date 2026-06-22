@@ -63,14 +63,6 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
   box-shadow: 0 4px 18px rgba(0,0,0,0.22);
 }
 
-#bubble-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #4cd964;
-  flex-shrink: 0;
-}
-
 #bubble-pill-typing {
   display: flex;
   gap: 4px;
@@ -87,6 +79,11 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 #bubble-pill-typing span:nth-child(2) { animation-delay: 0.18s; }
 #bubble-pill-typing span:nth-child(3) { animation-delay: 0.36s; }
 #bubble-pill-text { display: none; }
+
+@keyframes typing {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30%            { opacity: 1;   transform: translateY(-5px); }
+}
 
 /* ── BOTÓN FLOTANTE ───────────────────────────────────────────────────────── */
 #chat-toggle-btn {
@@ -118,7 +115,7 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
   display: none;
 }
 
-/* ── CHATBOT ──────────────────────────────────────────────────────────────── */
+/* ── CHATBOT CONTAINER ────────────────────────────────────────────────────── */
 #chatbot-container {
   background: white;
   border-radius: 12px;
@@ -126,7 +123,7 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
   display: flex;
   flex-direction: column;
   width: 370px;
-  height: 500px;
+  height: 520px;
   overflow: hidden;
   transform-origin: bottom right;
   transition: transform 0.3s ease, opacity 0.3s ease;
@@ -137,6 +134,7 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
   pointer-events: none;
 }
 
+/* ── HEADER PROPIO ────────────────────────────────────────────────────────── */
 #chat-header {
   background: #1a3a5c;
   padding: 12px 16px;
@@ -156,16 +154,22 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 }
 #close-btn:hover { opacity: 1; }
 
-/* ── IFRAME del webchat ───────────────────────────────────────────────────── */
-#copilot-iframe {
+/* ── IFRAME: ocupa el resto, sin header de Microsoft ─────────────────────── */
+#iframe-wrapper {
   flex: 1;
-  border: none;
-  width: 100%;
+  position: relative;
+  overflow: hidden;
 }
 
-@keyframes typing {
-  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
-  30%            { opacity: 1;   transform: translateY(-5px); }
+#copilot-iframe {
+  position: absolute;
+  /* Sube el iframe para ocultar el header de Microsoft (~60px) */
+  top: -62px;
+  left: 0;
+  width: 100%;
+  /* Compensa la altura para que el input no quede cortado */
+  height: calc(100% + 62px);
+  border: none;
 }
 </style>
 </head>
@@ -173,8 +177,9 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 
 <div id="chat-wrapper">
 
-  <!-- Chat abierto -->
   <div id="chatbot-container" class="hidden">
+
+    <!-- Tu header personalizado -->
     <div id="chat-header">
       <img src="https://rsce-chatbot-production-9d34.up.railway.app/Intelligent-Dog-Breeds.jpg"
            alt="RSCE" style="width:40px;height:40px;object-fit:cover;border-radius:50%;border:2px solid #c9a84c;">
@@ -185,18 +190,20 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
       <button id="close-btn" onclick="toggleChat()">✕</button>
     </div>
 
-    <!-- Webchat de Copilot Studio directamente -->
-    <iframe
-      id="copilot-iframe"
-      src="https://copilotstudio.microsoft.com/environments/Default-e92af6be-adc7-48a1-965e-60e102a5f05d/bots/cref3_asistenteRsce3MZRN1/webchat?__version__=2"
-      allow="microphone;">
-    </iframe>
+    <!-- Iframe con el header de Microsoft oculto via overflow -->
+    <div id="iframe-wrapper">
+      <iframe
+        id="copilot-iframe"
+        src="https://copilotstudio.microsoft.com/environments/Default-e92af6be-adc7-48a1-965e-60e102a5f05d/bots/cref3_asistenteRsce3MZRN1/webchat?__version__=2"
+        allow="microphone;">
+      </iframe>
+    </div>
+
   </div>
 
-  <!-- Fila inferior: pill a la izquierda, botón a la derecha -->
+  <!-- Fila inferior -->
   <div id="bottom-row">
 
-    <!-- Pill -->
     <div id="bubble-pill" onclick="openFromBubble()">
       <div id="bubble-label">
         <div id="bubble-pill-typing">
@@ -206,7 +213,6 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
       </div>
     </div>
 
-    <!-- Botón flotante -->
     <button id="chat-toggle-btn" onclick="toggleChat()" title="Abrir asistente RSCE">
       <img src="https://rsce-chatbot-production-9d34.up.railway.app/Intelligent-Dog-Breeds.jpg"
            alt="RSCE" style="width:56px;height:56px;object-fit:cover;border-radius:50%;">
@@ -217,13 +223,12 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 </div>
 
 <script>
-  let isOpen  = false;
+  let isOpen = false;
 
   const bubblePill = document.getElementById('bubble-pill');
   const pillTyping = document.getElementById('bubble-pill-typing');
   const pillText   = document.getElementById('bubble-pill-text');
 
-  // 1s → aparece con typing; 2s después → muestra texto
   setTimeout(() => {
     bubblePill.classList.add('visible');
     setTimeout(() => {
