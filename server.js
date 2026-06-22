@@ -19,7 +19,7 @@ const REQUIRED_ENV = [
   'AZURE_CLIENT_ID',
   'AZURE_CLIENT_SECRET',
   'COPILOT_ENVIRONMENT_ID',
-  'COPILOT_SCHEMA_NAME',
+  'COPILOT_AGENT_IDENTIFIER',   // ← corregido: antes era COPILOT_SCHEMA_NAME
 ];
 const missingEnv = REQUIRED_ENV.filter((k) => !process.env[k]);
 if (missingEnv.length) {
@@ -36,7 +36,8 @@ const msalClient = new ConfidentialClientApplication({
 
 const copilotSettings = {
   environmentId: process.env.COPILOT_ENVIRONMENT_ID,
-  schemaName: process.env.COPILOT_SCHEMA_NAME,
+  agentIdentifier: process.env.COPILOT_AGENT_IDENTIFIER,  // ← corregido: antes era schemaName
+  tenantId: process.env.AZURE_TENANT_ID,                   // ← añadido: necesario para entornos Default-
 };
 
 // MSAL cachea el token internamente y lo renueva solo cuando hace falta,
