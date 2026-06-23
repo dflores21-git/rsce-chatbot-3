@@ -15,6 +15,7 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 }
 #bottom-row { display: flex; align-items: center; gap: 10px; }
 
+/* ── PILL ────────────────────────────────────────────────────────────────── */
 #bubble-pill {
   display: flex; align-items: center; cursor: pointer;
   opacity: 0; transform: translateX(12px);
@@ -40,6 +41,7 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 #bubble-pill-typing span:nth-child(3) { animation-delay: 0.36s; }
 #bubble-pill-text { display: none; }
 
+/* ── BOTÓN FLOTANTE ──────────────────────────────────────────────────────── */
 #chat-toggle-btn {
   width: 56px; height: 56px; border-radius: 50%; background: none;
   border: 3px solid #c9a84c; cursor: pointer; display: flex;
@@ -53,44 +55,72 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
   background: #c9a84c; border-radius: 50%; border: 2px solid white; display: none;
 }
 
+/* ── CONTENEDOR CHAT ─────────────────────────────────────────────────────── */
 #chatbot-container {
   background: white; border-radius: 12px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.2);
   display: flex; flex-direction: column;
-  width: 370px; height: 520px; overflow: hidden;
+  width: 380px; height: 560px; overflow: hidden;
   transform-origin: bottom right;
   transition: transform 0.3s ease, opacity 0.3s ease;
 }
 #chatbot-container.hidden { transform: scale(0.85); opacity: 0; pointer-events: none; }
 
+/* ── HEADER PROPIO ───────────────────────────────────────────────────────── */
 #chat-header {
   background: #1a3a5c; padding: 12px 16px;
   display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  /* Franja dorada inferior para separar visualmente del iframe */
+  border-bottom: 2px solid #c9a84c;
 }
 #chat-header .info { flex: 1; }
 #chat-header .info h3 { color: white; font-size: 14px; font-weight: 600; }
 #chat-header .info span { color: #c9a84c; font-size: 11px; }
 #close-btn {
   background: none; border: none; color: white;
-  font-size: 20px; cursor: pointer; opacity: 0.7;
+  font-size: 20px; cursor: pointer; opacity: 0.7; line-height: 1;
 }
 #close-btn:hover { opacity: 1; }
 
-#webchat { flex: 1; overflow: hidden; }
-
-/* Loading state */
-#webchat-loading {
-  flex: 1; display: flex; align-items: center; justify-content: center;
-  flex-direction: column; gap: 12px; color: #666; font-size: 13px;
+/* ── WRAPPER DEL IFRAME: oculta el header de Microsoft ──────────────────── */
+#iframe-wrapper {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  /* Fondo mientras carga */
   background: #f4f6f8;
 }
-#webchat-loading .dots { display: flex; gap: 6px; }
-#webchat-loading .dots span {
+
+#copilot-iframe {
+  position: absolute;
+  top: -58px;          /* Sube para ocultar el header de Microsoft (~58px) */
+  left: 0;
+  width: 100%;
+  height: calc(100% + 58px);
+  border: none;
+  /* Suaviza la aparición */
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+#copilot-iframe.loaded { opacity: 1; }
+
+/* Spinner de carga mientras el iframe conecta */
+#iframe-loader {
+  position: absolute;
+  inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 12px; color: #666; font-size: 13px;
+  pointer-events: none;
+}
+#iframe-loader .dots { display: flex; gap: 6px; }
+#iframe-loader .dots span {
   width: 8px; height: 8px; border-radius: 50%;
   background: #1a3a5c; animation: typing 1.4s infinite;
 }
-#webchat-loading .dots span:nth-child(2) { animation-delay: 0.2s; }
-#webchat-loading .dots span:nth-child(3) { animation-delay: 0.4s; }
+#iframe-loader .dots span:nth-child(2) { animation-delay: 0.2s; }
+#iframe-loader .dots span:nth-child(3) { animation-delay: 0.4s; }
+#iframe-loader.hide { display: none; }
 
 @keyframes typing {
   0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
@@ -103,26 +133,35 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 <div id="chat-wrapper">
 
   <div id="chatbot-container" class="hidden">
+
+    <!-- Header personalizado RSCE -->
     <div id="chat-header">
       <img src="https://rsce-chatbot-production-9d34.up.railway.app/Intelligent-Dog-Breeds.jpg"
            alt="RSCE" style="width:40px;height:40px;object-fit:cover;border-radius:50%;border:2px solid #c9a84c;">
       <div class="info">
         <h3>Asistente RSCE</h3>
-        <span>En línea</span>
+        <span>● En línea</span>
       </div>
-      <button id="close-btn" onclick="toggleChat()">✕</button>
+      <button id="close-btn" onclick="toggleChat()" title="Cerrar">✕</button>
     </div>
 
-    <!-- Loading mientras se obtiene el token -->
-    <div id="webchat-loading">
-      <div class="dots"><span></span><span></span><span></span></div>
-      <span>Conectando...</span>
+    <!-- Iframe con header de Microsoft recortado -->
+    <div id="iframe-wrapper">
+      <div id="iframe-loader">
+        <div class="dots"><span></span><span></span><span></span></div>
+        <span>Conectando...</span>
+      </div>
+      <iframe
+        id="copilot-iframe"
+        src="https://copilotstudio.microsoft.com/environments/Default-e92af6be-adc7-48a1-965e-60e102a5f05d/bots/cref3_asistenteRsce3MZRN1/webchat?__version__=2"
+        allow="microphone"
+        onload="onIframeLoad()">
+      </iframe>
     </div>
 
-    <!-- Webchat SDK se renderiza aquí -->
-    <div id="webchat" style="display:none; flex:1; overflow:hidden;"></div>
   </div>
 
+  <!-- Fila inferior: pill + botón -->
   <div id="bottom-row">
     <div id="bubble-pill" onclick="openFromBubble()">
       <div id="bubble-label">
@@ -138,15 +177,14 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
   </div>
 </div>
 
-<script src="https://cdn.botframework.com/botframework-webchat/latest/webchat.js"></script>
 <script>
-  let isOpen      = false;
-  let webchatInit = false;
+  let isOpen = false;
 
   const bubblePill = document.getElementById('bubble-pill');
   const pillTyping = document.getElementById('bubble-pill-typing');
   const pillText   = document.getElementById('bubble-pill-text');
 
+  // Pill: aparece a 1s con typing, muestra texto a los 2s
   setTimeout(() => {
     bubblePill.classList.add('visible');
     setTimeout(() => {
@@ -166,78 +204,10 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
     if (!isOpen) toggleChat();
   }
 
-  async function initWebchat() {
-    if (webchatInit) return;
-    webchatInit = true;
-
-    try {
-      // Pide el token al servidor (que lo obtiene con las credenciales de Azure)
-      const res  = await fetch('/api/directline-token');
-      const data = await res.json();
-
-      if (!data.token) throw new Error(data.error || 'Token no recibido');
-
-      const styleOptions = {
-        backgroundColor:                    '#f4f6f8',
-
-        bubbleBackground:                   '#ffffff',
-        bubbleBorderColor:                  '#dde2e8',
-        bubbleBorderRadius:                 8,
-        bubbleTextColor:                    '#1a1a1a',
-
-        bubbleFromUserBackground:           '#1a3a5c',
-        bubbleFromUserBorderColor:          '#1a3a5c',
-        bubbleFromUserBorderRadius:         8,
-        bubbleFromUserTextColor:            '#ffffff',
-
-        sendBoxBackground:                  '#ffffff',
-        sendBoxBorderBottom:                '2px solid #c9a84c',
-        sendBoxBorderLeft:                  'none',
-        sendBoxBorderRight:                 'none',
-        sendBoxBorderTop:                   '1px solid #e0e0e0',
-        sendBoxTextColor:                   '#333',
-        sendBoxPlaceholderColor:            '#aaa',
-        sendBoxButtonColor:                 '#1a3a5c',
-        sendBoxButtonColorOnFocus:          '#c9a84c',
-        sendBoxButtonColorOnHover:          '#c9a84c',
-
-        timestampColor:                     '#999',
-
-        botAvatarImage:                     'https://rsce-chatbot-production-9d34.up.railway.app/Intelligent-Dog-Breeds.jpg',
-        botAvatarBackgroundColor:           '#1a3a5c',
-
-        suggestedActionBackground:          '#ffffff',
-        suggestedActionBorderColor:         '#c9a84c',
-        suggestedActionTextColor:           '#1a3a5c',
-        suggestedActionBackgroundColorOnHover: '#1a3a5c',
-        suggestedActionTextColorOnHover:    '#ffffff',
-        suggestedActionBorderRadius:        16,
-
-        primaryFont:                        "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
-        bubbleFontSize:                     13,
-      };
-
-      // Ocultar loading, mostrar webchat
-      document.getElementById('webchat-loading').style.display = 'none';
-      const webchatEl = document.getElementById('webchat');
-      webchatEl.style.display = 'flex';
-
-      window.WebChat.renderWebChat(
-        {
-          directLine: window.WebChat.createDirectLine({ token: data.token }),
-          styleOptions,
-          locale:   'es-ES',
-          userID:   'rsce-' + Math.random().toString(36).slice(2),
-          username: 'Usuario',
-        },
-        webchatEl
-      );
-
-    } catch (err) {
-      console.error('Error iniciando webchat:', err);
-      document.getElementById('webchat-loading').innerHTML =
-        '<span style="color:#c0392b;font-size:13px;">No se pudo conectar. Inténtalo de nuevo.</span>';
-    }
+  function onIframeLoad() {
+    // Oculta el spinner y muestra el iframe suavemente
+    document.getElementById('iframe-loader').classList.add('hide');
+    document.getElementById('copilot-iframe').classList.add('loaded');
   }
 
   function toggleChat() {
@@ -247,7 +217,6 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
       dismissBubble(null);
       container.classList.remove('hidden');
       document.getElementById('notification-dot').style.display = 'none';
-      initWebchat();
     } else {
       container.classList.add('hidden');
     }
