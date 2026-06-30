@@ -27,7 +27,7 @@ const BOT_IDENTIFIER    = 'cref3_asistenteRsce3MZRN1';
 const API_VERSION       = '2022-03-01-preview';
 const TOKEN_SCOPE       = 'https://api.powerplatform.com/.default';
 
-const DIRECTLINE_TOKEN_URL = `${COPILOT_BASE_URL}/copilotstudio/dataverse-backed/authenticated/bots/${BOT_IDENTIFIER}/directline/token?api-version=${API_VERSION}`;
+const DIRECTLINE_TOKEN_URL = `${COPILOT_BASE_URL}/powervirtualagents/botsbyschema/${BOT_IDENTIFIER}/directline/token?api-version=${API_VERSION}`;
 
 // ─── MSAL ─────────────────────────────────────────────────────────────────────
 const msalClient = new ConfidentialClientApplication({
